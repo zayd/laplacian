@@ -1,0 +1,10 @@
+.DS_Store
+*.png
+data/
+*.npy
+dictionaries/
+figures/
+paper/
+*.pyc
+.ipynb_checkpoints
+git_backup/

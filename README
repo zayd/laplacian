@@ -1,0 +1,108 @@
+Project to implement sparse codes for natural images across multiple scales of laplacian pyramid. The goal is that the network should be able to encode the scale structure of natural scenes in a more efficient manner. Applications in efficient coding, classification, denoising and occlusion.
+
+* To Do
+x Done
+
+For NIPS paper:
+[*] - Scale to 256x256
+	[*] - Change Gaussian sparse matrix to low rank singular vectors
+	[*] - Change sparse Phi to GPU 
+[*] - Optimal image for deep net
+[*] - Non-convolutional and multiscale fields of experts
+
+
+Paper
+[*] - Replace G[s] with blur (1D convolution) and upsample 
+[*] - MRI
+[*] - Visualizing deep nets
+[*] - Play around with filter stride
+[*] - Do smarter inference (i.e. only look at local connections). Band matrix multiply
+[*] - Train a convolutional laplacian pyramid
+[*] - Try out the non convolutional model on a different test set
+[x] - Image reconstruction with l1 norm and mse
+[x] - Entropy for a fixed SNR
+[x] - julien mairal thesis 
+[x] - state of the art in image denoising
+[x] - read portia and simoncelli, zetczshe, lyu+simoncelli, bethge
+
+To Do: 
+[x] - Solve proximal
+[x] - Do GPU
+[x] - IHT and denoising (better results?)
+[x] - Compare IHT and sparse coding multiscale to miki elad denoising (learn better basis functions)
+[x] - FISTA on GPU
+[x] - normalize basis functions based on unit norm
+[*] - Instead normalize based on scale max(1)
+[*] - Fix gain on laplacian generative model - scale DC gain to 4 (4 pixels interpolating at each level)
+[*] - Implement Nesterov Momentum -- Tried, not really beneficial. 
+[x] - Sparsity level at different levels
+[x] - Preprocess image by LPF top octave and downsamplel
+[x] - Use smaller filter size - derive frequency response of binomial filter
+[*] - Compare joint training with learning rates of the same values
+
+Fix:
+[x] - Clean up the display
+[x] - Clean up Preprocess
+
+To Do:
+[x] - Value for lambda given variance and value of coefficients
+[x] - SNR reconstruction plots, calculation mse: average over pixes, calculation: SNR: 10 log(inverse of MSE/(pixel variance -- sum square of pixel values))
+[x] - Make pretty denoising plots
+
+[x] - Set 0 level of display
+[x] - Initialization - overcompleteness
+[x] - Initialization - convolutional
+[x] - Update - overcompleteness
+[x] - Update - convolutional
+
+Dec 11 
+[x] Reshape takes O(n^2) time. Use sparse efficient reshape
+[x] Use zero padding on all images arrays
+[x] Look into using pysparse module instead of scipy.sparse
+
+Nov 21 - Meeting
+[*] - Sparsity, recon on old model
+[x] - Vanhateran 100,000 patches
+[*] - Fit gabors and show tiling with bars 
+[*] - Sparsity vs mse
+[*] - spatial -> frequency tiling
+[*] - Pick reconstruction dB
+[*] - Running time of FISTA vs LCA
+
+Nov 21 - Meeting Critical:
+[*] - Redo LCA using laplacian generative model
+[*]- Redo laplacian pyramid using laplacian pyramid generative model
+||X-G_0*Phi_0*a_0||_2^2 + ||a_0||_1
+
+Nov 15 - Meeting with Bruno
+[*] - Use more training images (~10,000) 
+[*] - Rescale levels of Laplacian Pyramid
+
+Critical
+[*] - Use own code to generate pyramid
+
+[*] - Fix the coupling between basis functions on different levels
+[*] - FISTA implementation
+[*] - Create script for example image reconstruction
+[*] - Unwhitened natural images on laplacian pyramid
+[*] - Adjust weight on reconstruction error based on level of Laplacian pyramid:
+	||recon||/sigma^2 + sparsity == ||recon|| + lambda * sparsity
+[x] - Experiment with gaussian std. dev. of kernel. Read Simoncelli multiscale paper
+
+Old
+[*] - In reconstruction currently modulo the image_side size. Maybe fix so that basis functions across scales aren't grouped together?
+[*] - Generalize reconstruction() for multiple images
+[*] - Overcomplete representations as that will lead to basis functions on different levels
+[*] - Write down equation for reconstruction of image from gabor basis
+[*] - Don't resize images at each level
+[*] - Fix how I'm expanding each level to image size
+	[*] - Affects how I calculate residuals
+	[*] - Currently we fix each basis function to be 8 x 8 x S. We do not decrease the size of the basis functions at each level
+
+Interesting
+[x] - Object localization?
+[*] - Sparse matrix generative model
+
+
+Files
+berkeley_32_3_20.npy 20 Images from Berkeley Dataset. 32*32 with a 3 scale Laplacian Pyramid Representation
