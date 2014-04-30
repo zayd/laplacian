@@ -1,19 +1,27 @@
 import scipy.signal
 import scipy.sparse as sps
+import scipy.ndimage as spn
 import numpy as np
 from numpy import mean, std, ceil, mod, floor, dot, arange
 import math
 from math import sqrt
 
-def build(I, scales, filter_radius=1):
-  """ Build a laplacian pyramid """ 
+def build(I, scales, filter_radius=2):
+  """ Build a laplacian pyramid 
+  I: images (batch x image_side x image_side)
+  scales: levels in pyramid
+  filter_radius: size of filter to use (std. for gaussian - not the same as radius)
+
+  Returns list of numpy arrays where each element in list is scale
+  (scale) x (batch x image_side x image_side)
+  """ 
   if scales == 1:
     pyramid = list()
     pyramid.append(I)
     return pyramid
   else:
     G1 = shrink(I)
-    L0 = image-expand(G1)
+    L0 = I-expand(G1)
 
     pyramid = build(G1, scales-1)
     pyramid.append(L0)
@@ -30,19 +38,26 @@ def reconstruct(pyramid):
 def shrink(image, downscale=2, filter_radius=1):
   image = blur(image, mask_radius=filter_radius)
 
-  return image[::downscale,::downscale]
+  return image[:, ::downscale,::downscale]
 
 def expand(image, upscale=2, filter_radius=1):
-  image_expanded = np.zeros((upscale*image.shape[0], upscale*image.shape[1]))
-  image_expanded[::upscale, ::upscale] = image
+  (batch, image_x ,image_y) = image.shape
+  image_expanded = np.zeros((batch, upscale*image_x, upscale*image_y))
+  image_expanded[:, ::upscale, ::upscale] = image
 
   return blur(image_expanded, mask_radius=filter_radius)
 
-def blur(image, kernel_type='binomial', mask_radius=1):
-  if kernel_type == 'binomial':
-    K = binomial(mask_radius)
+def blur(image, kernel_type='gaussian', mask_radius=1):
+  
+  if kernel_type == 'gaussian':
+    # Do it as a seperable 1d convolution (but not along batch axis)
+    image = spn.gaussian_filter1d(image, sigma=mask_radius, axis=1, mode='constant')
+    image = spn.gaussian_filter1d(image, sigma=mask_radius, axis=2, mode='constant')
+    return image
 
-  return scipy.signal.convolve2d(image, K, mode='same')
+  elif kernel_type == 'binomial':
+    K = binomial(mask_radius)
+    return scipy.signal.convolve2d(image, K, mode='same')
 
 def binomial(mask_radius=1):
   """ Returns a 2-D Binomial Filter """
@@ -114,7 +129,7 @@ def _padding_indices(image_side, pad):
 
 def _loopback(image, patch_side, scales=3, G=None, pyramid=None):
   """
-  Build laplacian pyramid and return reconstructred image from generative matrices
+  Build laplacian pyramid using build and return reconstructred image from generative matrices
   """
   base_image_side = image.shape[0]
   base_image_dim = base_image_side**2
