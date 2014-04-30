@@ -108,11 +108,15 @@ def reconstruct2(Phi, A):
     Phi[s].dot(A[s])
 
 
-def inference(I, G, Phi, base_image_dim, lambdav, algorithm='fista', max_iterations=100, max_eig=None):
+def inference(I, G, Phi, base_image_dim, lambdav, algorithm='fista', max_iterations=100, max_eig=None, mask=None):
   scales = len(Phi)
 
   if algorithm == 'fista':
     M = sps.hstack([G[s].dot(Phi[s]) for s in range(scales)]).tocsr()
+    if mask != None:
+      M = np.array(M.todense())
+      M = M * mask[:, np.newaxis]
+
     L = fista.fista(I, M, lambdav, max_iterations=max_iterations, display=False)
     A = np.vsplit(L, np.cumsum([base_image_dim/4**(scales-s-1) for s in range(scales)]))
     A.pop(-1)
