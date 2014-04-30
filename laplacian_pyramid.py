@@ -48,23 +48,11 @@ def expand(image, upscale=2, filter_radius=1):
   return blur(image_expanded, mask_radius=filter_radius)
 
 def blur(image, kernel_type='gaussian', mask_radius=1):
-  
   if kernel_type == 'gaussian':
     # Do it as a seperable 1d convolution (but not along batch axis)
     image = spn.gaussian_filter1d(image, sigma=mask_radius, axis=1, mode='constant')
     image = spn.gaussian_filter1d(image, sigma=mask_radius, axis=2, mode='constant')
     return image
-
-  elif kernel_type == 'binomial':
-    K = binomial(mask_radius)
-    return scipy.signal.convolve2d(image, K, mode='same')
-
-def binomial(mask_radius=1):
-  """ Returns a 2-D Binomial Filter """
-  length = 2*mask_radius+1
-  K = scipy.misc.comb((length-1)*np.ones(length), np.arange(length))
-  K = np.outer(K,K)
-  return K/np.sum(np.abs(K))
 
 def generative(base_image_side, patch_side, scales, kernel_type='binomial', base_mask_radius=2):
   """ Laplacian generative matrices of Laplacian pyramid in a csr format """
