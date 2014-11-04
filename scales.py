@@ -18,20 +18,25 @@ import laplacian_pyramid
 import fista
 import gpu
 
-def learn(G=None, Phi=None, dataset='vanhateran', base_image_dim=32*32, patch_dim=9*9, scales=2, overcomplete=1, iterations=4000, inf_iterations=150, batch=100, 
-    alpha=[200, 400], beta=0.95, gamma=0.95, decrease_every=200, lambdav=0.05, plot=False, plot_every=50, save=False, label=''):
+def learn(G=None, Phi=None, dataset='vanhateran', base_image_dim=32*32,
+          patch_dim=9*9, scales=2, overcomplete=1, iterations=4000,
+          inf_iterations=150, batch=100, alpha=[200, 400], beta=0.95,
+          gamma=0.95, decrease_every=200, lambdav=0.05, plot=False,
+          plot_every=50, save=False, label=''):
 
     patch_side = int(sqrt(patch_dim))
     base_image_side = int(sqrt(base_image_dim))
     pad = (patch_side-1)/2
-    
-    indices = [all_indices(base_image_side/2**(scales-s-1), patch_side, overcomplete=overcomplete) for s in range(scales)]
+
+    indices = [all_indices(base_image_side/2**(scales-s-1),
+               patch_side, overcomplete=overcomplete) for s in range(scales)]
 
     if Phi == None:
       Phi = initialize_scales(G, base_image_side, patch_side, scales=scales)
 
-    if G == None: 
-      G = laplacian_pyramid.generative(base_image_side, patch_side, scales, base_mask_radius=(patch_side-1)/2)
+    if G == None:
+      G = laplacian_pyramid.generative(base_image_side, patch_side, scales,
+                                       base_mask_radius=(patch_side-1)/2)
 
     base_neurons = base_image_dim
     momentum = [np.zeros((patch_dim, base_neurons/4**(scales-s-1))) for s in range(scales)]
@@ -39,9 +44,13 @@ def learn(G=None, Phi=None, dataset='vanhateran', base_image_dim=32*32, patch_di
     max_eig = scipy.sparse.linalg.svds(M, 1, which='LM', return_singular_vectors=False)
 
     for t in range(iterations+1):
-      I = preprocess.extract_images(dataset=dataset, num_images=batch, image_dim=base_image_dim, center=True, rescale=True, lowpass=True, pad=pad).T
+      I = preprocess.extract_images(dataset=dataset, num_images=batch,
+                                    image_dim=base_image_dim, center=True,
+                                    rescale=True, lowpass=True,
+                                    remove_scale=scales, pad=pad).T
 
-      A = inference(I, G, Phi, base_image_dim, lambdav, algorithm='fista-gpu', max_iterations=inf_iterations, max_eig=max_eig)
+      A = inference(I, G, Phi, base_image_dim, lambdav, algorithm='fista-gpu',
+                    max_iterations=inf_iterations, max_eig=max_eig)
       R = reconstruct(G, Phi, A)
 
       error = I - R
@@ -62,7 +71,7 @@ def learn(G=None, Phi=None, dataset='vanhateran', base_image_dim=32*32, patch_di
         dPhi = (error_s.transpose(1,2,0) * A[s][:, None, :]).sum(axis=2).T
 
         gamma = 1 - 3/float(t+5)
-        momentum[s] = gamma*momentum[s] + alpha[s]/float(batch) * dPhi 
+        momentum[s] = gamma*momentum[s] + alpha[s]/float(batch) * dPhi
 
         Phi[s] = Phi[s].tolil()
         Phi[s][indices[s][0], indices[s][1]] += momentum[s]
@@ -73,13 +82,13 @@ def learn(G=None, Phi=None, dataset='vanhateran', base_image_dim=32*32, patch_di
       #  skp.normalize(Phi[s], norm='l2', axis=0, copy=False)
 
       R = reconstruct(G, Phi, A)
-      
+
       error = I - R
       new_obj = np.sum(error**2) + lambdav*np.sum(np.sum(np.abs(a)) for a in A)
       print "New Objective: " + str(new_obj)
 
       # Armajillo's Rule
-      if new_obj > old_obj or t % decrease_every == 0:   
+      if new_obj > old_obj or t % decrease_every == 0:
         alpha = [a * beta for a in alpha]
         print "Learning rate: " + str(alpha)
 
@@ -130,7 +139,7 @@ def inference(I, G, Phi, base_image_dim, lambdav, algorithm='fista', max_iterati
 
 def initialize_scales(G, base_image_side, patch_side, scales):
   def initialize(image_side, patch_side, overcomplete=1, convolutional=False):
-    """ Initialize sparse Phi matrix with Gaussian random noise """ 
+    """ Initialize sparse Phi matrix with Gaussian random noise """
 
     pad = patch_side-1
     mask_radius = pad/2
@@ -147,7 +156,7 @@ def initialize_scales(G, base_image_side, patch_side, scales):
 
     Phi = sps.lil_matrix((pad_image_side**2, neurons*overcomplete))
     Phi[indices[0], indices[1]] = dPhi
-      
+
     Phi = sps.csc_matrix(Phi)
     #skp.normalize(Phi, norm='l2', axis=0, copy=False)
     return Phi
@@ -159,11 +168,11 @@ def initialize_scales(G, base_image_side, patch_side, scales):
   Phi = normalize(G, Phi)
 
   return Phi
-  
+
 def all_indices(image_side, patch_side, overcomplete=1):
     """ Returns list of indices for all neurons for advanced indexing """
     def indices(center, patch_side, image_side):
-        """ Return indices to use for advanced indexing for single neuron. 
+        """ Return indices to use for advanced indexing for single neuron.
         Assumes image is padded """
         x0, y0 = center
 
@@ -202,7 +211,7 @@ def normalize(G, Phi):
   return Phi
 
 def reshape(a, shape):
-  """Reshape the sparse matrix a to shape """ 
+  """Reshape the sparse matrix a to shape """
   c = a.tocoo()
   nrows, ncols = c.shape
   size = nrows * ncols
@@ -220,7 +229,7 @@ def reshape(a, shape):
 def patchify(img, patch_shape):
   patch_side, y = patch_shape
   # img is (row, column, batch)
-  img = img.transpose(2,0,1) 
+  img = img.transpose(2,0,1)
 
   # Need batch to be first but want the patches to be ordered [[1, 2, 3]; [4, 5, 6]]
   img = np.ascontiguousarray(img) # won't make a copy if not needed
@@ -246,7 +255,7 @@ def display_scales(t, G, Phi, patch_side=9, save=False, overcomplete=1, label=''
     (image_dim, total_neurons) = Phi[s].shape
     neurons = int(total_neurons/overcomplete)
     image_side = int(sqrt(image_dim))
-  
+
     total_side = int(patch_side*sqrt(neurons)+sqrt(neurons)+1)
 
     image = -1*np.ones((total_side, overcomplete*total_side))
@@ -260,7 +269,7 @@ def display_scales(t, G, Phi, patch_side=9, save=False, overcomplete=1, label=''
           start_col =int(o*total_side+j*patch_side+j+1)
           image[start_row:start_row+patch_side, start_col:start_col+patch_side] = temp
 
-      plt.imsave('./figures/level' + str(s) + '-' + str(label) + '-oc-' + str(overcomplete) + '-i' + str(image_side) + '-p' + str(patch_side) + 
+      plt.imsave('./figures/level' + str(s) + '-' + str(label) + '-oc-' + str(overcomplete) + '-i' + str(image_side) + '-p' + str(patch_side) +
         '-t' + str(t), image, cmap=cm.Greys_r)
 
   if save == True:
