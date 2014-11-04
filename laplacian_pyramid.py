@@ -7,52 +7,70 @@ import math
 from math import sqrt
 
 def build(I, scales, filter_radius=2):
-  """ Build a laplacian pyramid 
+  """ Build a laplacian pyramid
   I: images (batch x image_side x image_side)
   scales: levels in pyramid
   filter_radius: size of filter to use (std. for gaussian - not the same as radius)
 
   Returns list of numpy arrays where each element in list is scale
   (scale) x (batch x image_side x image_side)
-  """ 
+  """
   if scales == 1:
     pyramid = list()
     pyramid.append(I)
     return pyramid
   else:
-    G1 = shrink(I)
-    L0 = I-expand(G1)
+    G1 = shrink(I, filter_radius)
+    L0 = I-expand(G1, filter_radius)
 
-    pyramid = build(G1, scales-1)
+    pyramid = build(G1, scales-1, filter_radius)
     pyramid.append(L0)
 
     return pyramid
 
-def reconstruct(pyramid):
+def reconstruct(pyramid, filter_radius=2):
   if len(pyramid) == 1:
     return pyramid[0]
   else:
-    pyramid[1] = pyramid[1] + expand(pyramid[0])
-    return reconstruct(pyramid[1:])
+    pyramid[1] = pyramid[1] + expand(pyramid[0], filter_radius=2)
+    return reconstruct(pyramid[1:], filter_radius=2)
 
-def shrink(image, downscale=2, filter_radius=1):
+def shrink(image, downscale=2, filter_radius=2):
   image = blur(image, mask_radius=filter_radius)
 
   return image[:, ::downscale,::downscale]
 
-def expand(image, upscale=2, filter_radius=1):
+def expand(image, upscale=2, filter_radius=2):
   (batch, image_x ,image_y) = image.shape
   image_expanded = np.zeros((batch, upscale*image_x, upscale*image_y))
   image_expanded[:, ::upscale, ::upscale] = image
 
   return blur(image_expanded, mask_radius=filter_radius)
 
-def blur(image, kernel_type='gaussian', mask_radius=1):
-  if kernel_type == 'gaussian':
+def blur(image, kernel_type='binomial', mask_radius=2):
+  if kernel_type == 'binomial':
+    K = binomial(mask_radius, mode='1d')
+    image = spn.convolve1d(image, K, axis=1, mode='constant')
+    image = spn.convolve1d(image, K, axis=2, mode='constant')
+
+  elif kernel_type == 'gaussian':
     # Do it as a seperable 1d convolution (but not along batch axis)
+    # TO DO: Normalize
     image = spn.gaussian_filter1d(image, sigma=mask_radius, axis=1, mode='constant')
     image = spn.gaussian_filter1d(image, sigma=mask_radius, axis=2, mode='constant')
-    return image
+
+  return image
+
+def binomial(mask_radius=2, interpolation=4, mode='2d'):
+  """ Returns a 2-D Binomial Filter for generative matrix. Interpolation for 1 px to 4 px. Has L1 norm\DC gain of 4."""
+  length = 2*mask_radius+1
+
+  K = scipy.misc.comb((length-1)*np.ones(length), np.arange(length))
+
+  if mode == '2d':
+    K = np.outer(K,K)
+
+  return interpolation*(K/np.sum(np.abs(K)))
 
 def generative(base_image_side, patch_side, scales, kernel_type='binomial', base_mask_radius=2):
   """ Laplacian generative matrices of Laplacian pyramid in a csr format """
@@ -94,8 +112,7 @@ def generative(base_image_side, patch_side, scales, kernel_type='binomial', base
             zero_indices = zero_indices[1:]
 
           else:
-            # scale kernel by 4 to not lose any power in 2D interpolation
-            G[s][:,i] = localize(4*kernel, base_image_side+2*pad, 
+            G[s][:,i] = localize(kernel, base_image_side+2*pad,
              tuple(2**s * c + pad for c in divmod(j, image_side)), mask_radius=mask_radius)
             j += 1
 
@@ -124,7 +141,7 @@ def _loopback(image, patch_side, scales=3, G=None, pyramid=None):
 
   if pyramid == None:
     pyramid = build(image, scales=scales)
-  
+
   if G == None:
     G = generative(base_image_side, patch_side, scales)
 
