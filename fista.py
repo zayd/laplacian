@@ -1,4 +1,4 @@
-""" Implementation of inference algorithms for sparse coding """ 
+""" Implementation of inference algorithms for sparse coding """
 
 import numpy as np
 import math
@@ -7,7 +7,8 @@ import scipy.sparse.linalg
 import time
 
 def fista(I, Phi, lambdav, max_iterations=150, display=False, problem='l1', groups=None):
-  """ FISTA Inference for Lasso (l1) Problem 
+  """
+  FISTA Inference for Lasso (l1) Problem
   I: Batches of images (dim x batch)
   Phi: Dictionary (dim x dictionary element) (nparray or sparse array)
   lambdav: Sparsity penalty
@@ -41,20 +42,20 @@ def fista(I, Phi, lambdav, max_iterations=150, display=False, problem='l1', grou
       #penalty = 0
       #for i in range(num_groups):
       # penalty += np.linalg.norm(x2[groups[i]])
-      
+
       #print "L1L2 Objective" + str(np.sum((I-Phi.dot(x2))**2) + lambdav*penalty)
 
   return x2
 
 def l1proxOp(x,t):
-  """ L1 Proximal Operator """ 
+  """ L1 Proximal Operator """
   return np.fmax(x-t, 0) + np.fmin(x+t, 0)
 
 def l1l2proxOp(x, g, t):
   """ Proximal Operator of l1\l2 group sparse coding
-    x: Coefficient vector 
+    x: Coefficient vector
     g: Group indices. (groups x indices)
-    t: penalty 
+    t: penalty
   """
   (num_indices, num_groups) = g.shape
 
@@ -64,6 +65,6 @@ def l1l2proxOp(x, g, t):
     if group_norm <= t:
       x[g[i]] = 0
     else:
-      x[g[i]] *= (group_norm-t)/float(group_norm)  
+      x[g[i]] *= (group_norm-t)/float(group_norm)
 
   return x

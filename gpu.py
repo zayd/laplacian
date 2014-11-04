@@ -1,10 +1,9 @@
-""" GPU Experiments for Laplacian Pyramid """
-
 from __future__ import division
 
 from numbapro import cuda
 import numpy as np
-import numbapro.cudalib.cublas
+import numbapro.cudalib.cublas as cublas
+import numbapro.cudalib.cusparse as cusparse
 import numpy.random
 import math
 import scipy.sparse.linalg
@@ -20,7 +19,9 @@ def test(n=256, k=30, batch=100):
 	d_G2 = cuda.to_device(G2)
 
 def fista(I, Phi, lambdav, L=None, tol=10e-6, max_iterations=200, display=True, verbose=False):
-	b = numbapro.cudalib.cublas.Blas()
+	b = cublas.Blas()
+	c = cusparse.Sparse()
+	descr = c.matdescr()
 	(m, n) = Phi.shape
 	(m, batch) = I.shape
 
@@ -28,16 +29,18 @@ def fista(I, Phi, lambdav, L=None, tol=10e-6, max_iterations=200, display=True, 
 		L = scipy.sparse.linalg.svds(Phi, 1, which='LM', return_singular_vectors=False)
 		print "Max eigenvalue: ." + str(L)
 
-	L = (L**2)*4 # L = svd(Phi) -> eig(2*(Phi.T*Phi))
+	L = (L**2)*2 # L = svd(Phi) -> eig(2*(Phi.T*Phi))
 	invL = 1/L
 	t = 1.
 
-	if sps.issparse(Phi):
-		Phi = np.array(Phi.todense())
+	#if sps.issparse(Phi):
+	#	Phi = np.array(Phi.todense())
 
 	d_I = cuda.to_device(np.array(I, dtype=np.float32, order='F'))
-	d_Phi = cuda.to_device(np.array(Phi, dtype=np.float32, order='F'))
-	d_Q = cuda.device_array((n, n), dtype=np.float32, order='F')
+	# d_Phi = cuda.to_device(np.array(Phi, dtype=np.float32, order='F'))
+	d_Phi =  cusparse.csr_matrix(Phi, dtype=np.float32)
+	d_PhiT = cusparse.csr_matrix(Phi.T, dtype=np.float32) # hack because csrgemm issues with 'T'
+	# d_Q = cuda.device_array((n, n), dtype=np.float32, order='F')
 	d_c = cuda.device_array((n, batch), dtype=np.float32, order='F')
 	d_x = cuda.to_device(np.array(np.zeros((n, batch), dtype=np.float32), order='F'))
 	d_y = cuda.to_device(np.array(np.zeros((n, batch), dtype=np.float32), order='F'))
@@ -47,8 +50,13 @@ def fista(I, Phi, lambdav, L=None, tol=10e-6, max_iterations=200, display=True, 
 	d_t = cuda.device_array((m, batch), dtype=np.float32, order='F')
 	d_t2 = cuda.device_array(n*batch, dtype=np.float32, order='F')
 
-	b.gemm('T', 'N', n, n, m, 1, d_Phi, d_Phi, 0, d_Q) 	# Q = Phi^T * Phi
-	b.gemm('T', 'N', n, batch, m, -2, d_Phi, d_I, 0, d_c) # c = -2*Phi^T * y
+	#b.gemm('T', 'N', n, n, m, 1, d_Phi, d_Phi, 0, d_Q) 	# Q = Phi^T * Phi
+	#b.gemm('T', 'N', n, batch, m, -2, d_Phi, d_I, 0, d_c) # c = -2*Phi^T * y
+	# c.csrgemm('T', 'N', n, n, m, descr, d_Phi.nnz, d_Phi.data, d_Phi.indptr, d_Phi.indices,
+	#	descr, d_Phi.nnz, d_Phi.data, d_Phi.indptr, d_Phi.indices, descr, d_Q.data, d_Q.indptr, d_Q.indices)
+	d_Q = c.csrgemm_ez(d_PhiT, d_Phi, transA='N', transB='N')
+	c.csrmm('T', m, batch, n, d_Phi.nnz, -2, descr, d_Phi.data, d_Phi.indptr, d_Phi.indices, 
+		d_I, m, 0, d_c, n)
 
 	blockdim = 32, 32
 	griddim = int(math.ceil(n/blockdim[0])), int(math.ceil(batch/blockdim[1]))
@@ -56,13 +64,15 @@ def fista(I, Phi, lambdav, L=None, tol=10e-6, max_iterations=200, display=True, 
 	blockdim_1d = 256
 	griddim_1d = int(math.ceil(n*batch/blockdim_1d))
 
-	start = l2l1obj(b, d_I, d_Phi, d_x, d_t, d_t2, lambdav, blockdim_1d, griddim_1d)
+	start = l2l1obj(b, c, descr, d_I, d_Phi, d_x, d_t, d_t2, lambdav, blockdim_1d, griddim_1d)
 	obj2 = start
 
 	for i in xrange(max_iterations):
 
 		# x2 = 2*Q*y + c
-		b.symm('L', 'U', n, batch, 2, d_Q, d_y, 0, d_x2)
+		# b.symm('L', 'U', n, batch, 2, d_Q, d_y, 0, d_x2)
+		c.csrmm('N', n, batch, n, d_Q.nnz, 2, descr, d_Q.data, d_Q.indptr, d_Q.indices, 
+			d_y, n, 0, d_x2, n)
 		b.geam('N', 'N', n, batch, 1, d_c, 1, d_x2, d_x2)
 		
 		# x2 = y - invL * x2
@@ -81,7 +91,7 @@ def fista(I, Phi, lambdav, L=None, tol=10e-6, max_iterations=200, display=True, 
 
 		# update objective
 		obj = obj2
-		obj2 = l2l1obj(b, d_I, d_Phi, d_x2, d_t, d_t2, lambdav, blockdim_1d, griddim_1d)
+		obj2 = l2l1obj(b, c, descr, d_I, d_Phi, d_x2, d_t, d_t2, lambdav, blockdim_1d, griddim_1d)
 
 		if verbose:
 			x2 = d_x2.copy_to_host()
@@ -101,16 +111,20 @@ def fista(I, Phi, lambdav, L=None, tol=10e-6, max_iterations=200, display=True, 
 
 	return x2
 
-def l2l1obj(b, d_I, d_Phi, d_x2, d_t, d_t2, lambdav, blockdim, griddim):
+def l2l1obj(b, c, descr, d_I, d_Phi, d_x2, d_t, d_t2, lambdav, blockdim, griddim):
 	(m, n) = d_Phi.shape
 	(m, batch) = d_I.shape
 
-	b.gemm('N', 'N', m, batch, n, 1, d_Phi, d_x2, 0, d_t)
+	#b.gemm('N', 'N', m, batch, n, 1, d_Phi, d_x2, 0, d_t)
+	c.csrmm('N', m, batch, n, d_Phi.nnz, 1, descr, d_Phi.data, d_Phi.indptr, d_Phi.indices, 
+		d_x2, n, 0, d_t, m)
 	b.geam('N', 'N', m, batch, 1, d_I, -1, d_t, d_t)
 
- 	l2 = b.nrm2(d_t.ravel(order='F'))**2
+	d_t = cu_vectorize(d_t) # d_t.ravel(order='F')
+ 	l2 = b.nrm2(d_t)**2
  	
- 	gabs[griddim, blockdim](d_x2.ravel(order='F'), d_t2)
+ 	d_x2 = cu_vectorize(d_x2) #d_x2.ravel(order='F')
+ 	gabs[griddim, blockdim](d_x2, d_t2)
  	
  	l1 = lambdav*b.asum(d_t2)
 
@@ -151,7 +165,7 @@ def l1prox(A, t, C):
 def gabs(x, y):
 	i = cuda.grid(1)
 
-	if i >= x.size:
+	if i >= x.size or i >= y.size: 
 		return
 
 	if x[i] < 0:

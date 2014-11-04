@@ -3,14 +3,38 @@ Project to implement sparse codes for natural images across multiple scales of l
 * To Do
 x Done
 
+[*] - Add a preprocesssing remove 8x8 patch
+[*] - Fix generating matrix gaussian std. dev.
+[*] - Fix update G^T scale
+[*] - Fix generating matrix
+[*] - Non normalize
+[*] - Display coefficients topographic\Animate laplacian
+[*] - lambda small at low frequency, large at low frequency
+[*] - look at coefficient variance at different levels
+[*] - synthesis (different lambdas)
+[*] - weighted norm l1/l2 - pairwise (across scale l1/l2 norm)
+[*] - fix alignment of laplacian generative matrix (ln 105 in laplacian_pyramid - some offset related to scale)?
+
+For Redwood Presentation:
+[*] - Project filters back to image domain
+[*] - Look at variance on each scale
+[*] - Animated GIF of image reconstruction
+[*] - Sparsity vs MSE of conv vs non conv
+[*] - Occlusion model
+[*] - Compare convolution model to non-convolution model
+
 For NIPS paper:
 [*] - Scale to 256x256
-	[*] - Change Gaussian sparse matrix to low rank singular vectors
 	[*] - Change sparse Phi to GPU 
-[*] - Optimal image for deep net
+		[*] - Rewrite update with GPU kernels
+		[*] - Gram matrix computation is different
+		[x] - Replace G with upscale and blur
+	[*] - Use sparse matrix multiply for inference
 [*] - Non-convolutional and multiscale fields of experts
+[*] - Occlusion with binary mask
+[*] - OC convolution vs tiled representation (where can you add parameters)
 
-
+[*] - Optimal image for deep net
 Paper
 [*] - Replace G[s] with blur (1D convolution) and upsample 
 [*] - MRI

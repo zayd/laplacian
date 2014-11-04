@@ -16,9 +16,9 @@ import sklearn.preprocessing as skp
 import preprocess
 import laplacian_pyramid
 import fista
-#import gpu
+import gpu
 
-def learn(G=None, Phi=None, base_image_dim=32*32, patch_dim=9*9, scales=2, overcomplete=1, iterations=4000, inf_iterations=150, batch=100, 
+def learn(G=None, Phi=None, dataset='vanhateran', base_image_dim=32*32, patch_dim=9*9, scales=2, overcomplete=1, iterations=4000, inf_iterations=150, batch=100, 
     alpha=[200, 400], beta=0.95, gamma=0.95, decrease_every=200, lambdav=0.05, plot=False, plot_every=50, save=False, label=''):
 
     patch_side = int(sqrt(patch_dim))
@@ -39,7 +39,7 @@ def learn(G=None, Phi=None, base_image_dim=32*32, patch_dim=9*9, scales=2, overc
     max_eig = scipy.sparse.linalg.svds(M, 1, which='LM', return_singular_vectors=False)
 
     for t in range(iterations+1):
-      I = preprocess.extract_images(images='vanhateran', num_images=batch, image_dim=base_image_dim, normalize=True, lowpass=True, pad=pad).T
+      I = preprocess.extract_images(dataset=dataset, num_images=batch, image_dim=base_image_dim, center=True, rescale=True, lowpass=True, pad=pad).T
 
       A = inference(I, G, Phi, base_image_dim, lambdav, algorithm='fista-gpu', max_iterations=inf_iterations, max_eig=max_eig)
       R = reconstruct(G, Phi, A)
@@ -53,6 +53,7 @@ def learn(G=None, Phi=None, base_image_dim=32*32, patch_dim=9*9, scales=2, overc
         neurons = base_neurons/4**((scales-s-1))
         image_side = base_image_side/2**((scales-s-1))
         error_s = G[s].T.dot(error)
+        error_s = error_s/float(scales-s-1)
 
         error_s = error_s.reshape(image_side+2*pad, image_side+2*pad, batch)
         error_s = patchify(error_s, (patch_side, patch_side))
@@ -100,8 +101,6 @@ def reconstruct(G, Phi, A):
     return R
 
 def reconstruct2(Phi, A):
-  def upsample_blur(Phi, A, upscale):
-    scales = len(Phi)
 
   R = np.zeros()
   for s in range(scales-1):
