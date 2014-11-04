@@ -62,7 +62,9 @@ def learn(G=None, Phi=None, dataset='vanhateran', base_image_dim=32*32,
         neurons = base_neurons/4**((scales-s-1))
         image_side = base_image_side/2**((scales-s-1))
         error_s = G[s].T.dot(error)
-        error_s = error_s/float(scales-s-1)
+        #print "s", s
+        #print "(scales-s-1)", (scales-s-1)
+        #error_s = error_s/float(scales-s-1)
 
         error_s = error_s.reshape(image_side+2*pad, image_side+2*pad, batch)
         error_s = patchify(error_s, (patch_side, patch_side))

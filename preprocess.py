@@ -21,7 +21,7 @@ def extract_images(dataset='vanhateran', num_images=2000, image_dim=32*32,
 
   IMAGES = np.zeros((num_images,image_dim))
 
-  image_dir = '../../images/' + dataset + '/'
+  image_dir = '/data/sets/images/' + dataset + '/'
   filenames = filter( lambda f: not f.startswith('.'), os.listdir(image_dir))
 
   num_images = num_images/patches_per_image
@@ -41,6 +41,16 @@ def extract_images(dataset='vanhateran', num_images=2000, image_dim=32*32,
       img = scipy.ndimage.filters.gaussian_filter(img, sigma=1)
       img = img[::2, ::2]
       (full_image_side, _) = np.shape(img)
+
+    if remove_scale:
+      """Remove top layer laplacian pyramid from image"""
+      # print "Removing scale: ", remove_scale
+      top = laplacian_pyramid.build(img.reshape(1, img.shape[0], img.shape[1]),
+                                    scales=remove_scale)[0]
+      for s in range(remove_scale-1):
+        top = laplacian_pyramid.expand(top, upscale=2)
+
+      img = img - top.squeeze()
 
     if patches_per_image == 1:
       IMAGES[n] = img.reshape(image_dim)
@@ -69,11 +79,6 @@ def extract_images(dataset='vanhateran', num_images=2000, image_dim=32*32,
     print "Whitening"
     IMAGES = IMAGES.dot(whiten)
 
-  if remove_scale:
-    """Remove top layer laplacian pyramid from image"""
-    top = laplacian_pyramid.build(img, scales=remove_scale)[0]
-    top = laplacian_pyramid.expand(img, upscale=2**(remove_scale-1))
-    img = img - top
 
   return IMAGES
 
@@ -99,21 +104,6 @@ def load_file(dataset, filename):
     img = img['sol_yxzt']
     img = img[:, :, 3, random.randint(0, 19)] # slice 3 is in middle
     return img
-
-
-def binomial(mask_radius=1, dim=2):
-  """ Returns a 1-D or 2-D Binomial Filter """
-  length = 2*mask_radius+1
-  K = scipy.misc.comb((length-1)*np.ones(length), np.arange(length))
-
-  if dim == 1:
-    return K/np.sum(np.abs(K))
-
-  if dim == 2:
-    K = np.outer(K,K)
-    return K/np.sum(np.abs(K))
-
-  return None
 
 def whitening_matrix(X,fudge=10^50):
   # the matrix X should be observations-by-components

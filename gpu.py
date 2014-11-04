@@ -29,7 +29,7 @@ def fista(I, Phi, lambdav, L=None, tol=10e-6, max_iterations=200, display=True, 
 		L = scipy.sparse.linalg.svds(Phi, 1, which='LM', return_singular_vectors=False)
 		print "Max eigenvalue: ." + str(L)
 
-	L = (L**2)*2 # L = svd(Phi) -> eig(2*(Phi.T*Phi))
+	L = (L**2)*4 # L = svd(Phi) -> eig(2*(Phi.T*Phi))
 	invL = 1/L
 	t = 1.
 
@@ -55,7 +55,7 @@ def fista(I, Phi, lambdav, L=None, tol=10e-6, max_iterations=200, display=True, 
 	# c.csrgemm('T', 'N', n, n, m, descr, d_Phi.nnz, d_Phi.data, d_Phi.indptr, d_Phi.indices,
 	#	descr, d_Phi.nnz, d_Phi.data, d_Phi.indptr, d_Phi.indices, descr, d_Q.data, d_Q.indptr, d_Q.indices)
 	d_Q = c.csrgemm_ez(d_PhiT, d_Phi, transA='N', transB='N')
-	c.csrmm('T', m, batch, n, d_Phi.nnz, -2, descr, d_Phi.data, d_Phi.indptr, d_Phi.indices, 
+	c.csrmm('T', m, batch, n, d_Phi.nnz, -2, descr, d_Phi.data, d_Phi.indptr, d_Phi.indices,
 		d_I, m, 0, d_c, n)
 
 	blockdim = 32, 32
@@ -71,17 +71,17 @@ def fista(I, Phi, lambdav, L=None, tol=10e-6, max_iterations=200, display=True, 
 
 		# x2 = 2*Q*y + c
 		# b.symm('L', 'U', n, batch, 2, d_Q, d_y, 0, d_x2)
-		c.csrmm('N', n, batch, n, d_Q.nnz, 2, descr, d_Q.data, d_Q.indptr, d_Q.indices, 
+		c.csrmm('N', n, batch, n, d_Q.nnz, 2, descr, d_Q.data, d_Q.indptr, d_Q.indices,
 			d_y, n, 0, d_x2, n)
 		b.geam('N', 'N', n, batch, 1, d_c, 1, d_x2, d_x2)
-		
+
 		# x2 = y - invL * x2
 		b.geam('N', 'N', n, batch, 1, d_y, -invL, d_x2, d_x2)
 
-		# proxOp()						
+		# proxOp()
 		l1prox[griddim, blockdim](d_x2, invL*lambdav, d_x2)
 		t2 = (1+math.sqrt(1+4*(t**2)))/2.0
-		
+
 		# y = x2 + ((t-1)/t2)*(x2-x)
 		b.geam('N', 'N', n, batch, 1+(t-1)/t2, d_x2, (1-t)/t2, d_x, d_y)
 
@@ -116,34 +116,34 @@ def l2l1obj(b, c, descr, d_I, d_Phi, d_x2, d_t, d_t2, lambdav, blockdim, griddim
 	(m, batch) = d_I.shape
 
 	#b.gemm('N', 'N', m, batch, n, 1, d_Phi, d_x2, 0, d_t)
-	c.csrmm('N', m, batch, n, d_Phi.nnz, 1, descr, d_Phi.data, d_Phi.indptr, d_Phi.indices, 
+	c.csrmm('N', m, batch, n, d_Phi.nnz, 1, descr, d_Phi.data, d_Phi.indptr, d_Phi.indices,
 		d_x2, n, 0, d_t, m)
 	b.geam('N', 'N', m, batch, 1, d_I, -1, d_t, d_t)
 
 	d_t = cu_vectorize(d_t) # d_t.ravel(order='F')
  	l2 = b.nrm2(d_t)**2
- 	
+
  	d_x2 = cu_vectorize(d_x2) #d_x2.ravel(order='F')
  	gabs[griddim, blockdim](d_x2, d_t2)
- 	
+
  	l1 = lambdav*b.asum(d_t2)
 
  	return l2 + l1
 
 def cu_vectorize(a):
     """ Vectorize a DeviceNDArray """
-    
+
     new_shape = int(np.prod(a.shape))
     new_strides = int(a.alloc_size/a.size)
 
     res = cuda.devicearray.DeviceNDArray(
-        shape=new_shape, strides=new_strides, 
+        shape=new_shape, strides=new_strides,
         dtype=a.dtype, gpu_data=a.gpu_data)
     return res
 
 @cuda.jit('void(float32[:,:], float64, float32[:,:])')
 def l1prox(A, t, C):
-	""" l1 Proximal operator: C = np.fmax(A-t, 0) + np.fmin(A+t, 0) 
+	""" l1 Proximal operator: C = np.fmax(A-t, 0) + np.fmin(A+t, 0)
 	A: coefficients matrix (dim, batch)
 	t: threshold
 	C: output (dim, batch) """
@@ -153,9 +153,9 @@ def l1prox(A, t, C):
 		return
 
 	if A[i, j] >= t:
-		C[i, j] = A[i, j] - t 
-	elif A[i, j] <= -t: 
-		C[i, j] = A[i, j] + t    
+		C[i, j] = A[i, j] - t
+	elif A[i, j] <= -t:
+		C[i, j] = A[i, j] + t
 	else:
 		C[i, j] = 0
 
@@ -165,7 +165,7 @@ def l1prox(A, t, C):
 def gabs(x, y):
 	i = cuda.grid(1)
 
-	if i >= x.size or i >= y.size: 
+	if i >= x.size or i >= y.size:
 		return
 
 	if x[i] < 0:
